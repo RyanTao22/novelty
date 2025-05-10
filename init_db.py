@@ -1,10 +1,8 @@
 import os
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 import streamlit as st
 
-# Load environment variables
-load_dotenv()
+
 
 # Database configuration
 DATABASE_URL = f"mysql+pymysql://{st.secrets['DB_USER']}:{st.secrets['DB_PASSWORD']}@" \
