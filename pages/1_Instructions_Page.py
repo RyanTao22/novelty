@@ -22,7 +22,7 @@ def main():
         st.markdown("""
         ### What You Need to Do:
         1. **Purchase** words / word combinations / story content to create stories
-        2. **Create** a science fiction short story based on whar you purchased
+        2. **Create** a science fiction short story based on what you purchased
         3. **Submit** your work, set copyright transfer fees and submit
         
         ### After You Submit:
@@ -51,7 +51,7 @@ def main():
             
 
         answer = st.radio(
-            "When creating a story, what should each sentence contain?",
+            "Please answer the following question: when creating a story, what should each sentence contain?",
             options=[
                 "No specific content required",
                 "Must contain one of your chosen words",
