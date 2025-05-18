@@ -45,19 +45,26 @@ def init_session_state():
     if 'stories_for_rating' in st.session_state:
         return
     
+    # 显示加载提示
+    loading_placeholder = st.empty()
+    loading_placeholder.info("DEBUG: Loading rating data...")
+    
     db = next(get_db())
     try:
         # 1. Get all stories for rating in the current round
+        loading_placeholder.info("DEBUG: Querying stories...")
         stories = db.query(UserAsset).filter(
             UserAsset.round_id == st.secrets['round_id'],
             UserAsset.asset_type == 'user_creation'
         ).order_by(UserAsset.created_at.desc()).all()
         
         # 2. Get the story IDs the user has already rated
+        loading_placeholder.info("DEBUG: Getting rated stories...")
         user_ratings = StoryRatingService.get_player_ratings(db, st.session_state.player_id)
         rated_story_ids = {rating.asset_id for rating in user_ratings}
         
         # 3. Filter out stories the user hasn't rated yet
+        loading_placeholder.info("DEBUG: Filtering unrated stories...")
         st.session_state.stories_for_rating = []
         for story in stories:
             # If the user hasn't rated this story yet
@@ -67,6 +74,7 @@ def init_session_state():
                 st.session_state.stories_for_rating.append(story)
                 
         # Initialize rating data in session state
+        loading_placeholder.info("DEBUG: Initializing rating data...")
         if 'rating_data' not in st.session_state:
             st.session_state.rating_data = {}
             for i, story in enumerate(st.session_state.stories_for_rating):
@@ -75,6 +83,9 @@ def init_session_state():
                     for rating_type, config in RATING_CONFIGS.items()
                 }
                 st.session_state.rating_data[story.asset_id]['original_ip_rate'] = story.original_ip_rate
+        
+        # 清除加载提示
+        loading_placeholder.empty()
     finally:
         db.close()
 

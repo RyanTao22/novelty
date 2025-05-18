@@ -66,11 +66,17 @@ def init_session_state():
         elif 'temp_story_content' in st.session_state and 'story_content' not in st.session_state:
             st.session_state.story_content = st.session_state.temp_story_content
         return
+    
+    # 显示加载提示
+    loading_placeholder = st.empty()
+    loading_placeholder.info("DEBUG: Initializing data...")
         
     # 获取数据，不使用缓存
+    loading_placeholder.info("DEBUG: Getting round config...")
     st.session_state.round_config = get_round_config(st.secrets['round_id'])
     
     # 获取玩家信息并立即获取total_earnings值，避免DetachedInstanceError
+    loading_placeholder.info("DEBUG: Getting player info...")
     db = next(get_db())
     try:
         player = PlayerService.get_player(db, st.session_state.player_id)
@@ -85,16 +91,20 @@ def init_session_state():
         db.close()
     
     # Get all vocabularies owned by the player
+    loading_placeholder.info("DEBUG: Loading vocabularies...")
     st.session_state.owned_vocabs = get_player_vocabularies(st.session_state.player_id)
     
     # Load player's existing assets
+    loading_placeholder.info("DEBUG: Loading player assets...")
     st.session_state.player_assets = get_player_assets(st.session_state.player_id)
     
     # Initialize transaction history and story content
+    loading_placeholder.info("DEBUG: Setting up transaction history...")
     st.session_state.transaction_history = []
     st.session_state.initialized = True
     
     # Initialize story content - try to load latest content from saved drafts
+    loading_placeholder.info("DEBUG: Loading latest draft...")
     st.session_state.story_content = ""
     story_drafts = [asset for asset in st.session_state.player_assets
                     if asset.asset_type == 'story_draft' and asset.content]
@@ -104,6 +114,9 @@ def init_session_state():
         st.session_state.story_content = latest_draft.content
         # Also initialize temporary content
         st.session_state.temp_story_content = latest_draft.content
+        
+    # 清除加载提示
+    loading_placeholder.empty()
 
 # Local transaction handling functions
 def handle_purchase_combination(combo_id: str):
@@ -417,12 +430,17 @@ def handle_submit_story(content_ip_rate):
     return True, creation_message
 
 def sync_to_database():
+    # 显示同步提示
+    sync_placeholder = st.empty()
+    sync_placeholder.info("DEBUG: Starting database sync...")
+    
     db = next(get_db())
     try:
         # DEBUG PRINT
         print("=== STARTING DATABASE SYNC ===")
         
         # Get latest player asset information to prevent duplicate transactions
+        sync_placeholder.info("DEBUG: Getting existing assets...")
         existing_assets = UserAssetService.get_player_assets(db, st.session_state.player_id)
         
         # DEBUG PRINT
@@ -447,6 +465,7 @@ def sync_to_database():
         processed_transactions = []
         
         # Process all transaction records
+        sync_placeholder.info("DEBUG: Processing transactions...")
         for transaction in st.session_state.transaction_history:
             # DEBUG PRINT
             print(f"Processing transaction: {transaction['type']}")
@@ -614,6 +633,7 @@ def sync_to_database():
             st.session_state.story_content = st.session_state.temp_story_content
             
         # Update player balance
+        sync_placeholder.info("DEBUG: Updating player balance...")
         PlayerService.update_player_balance(db, st.session_state.player_id, st.session_state.current_balance)
         
         # Remove processed transactions from transaction history
@@ -622,6 +642,7 @@ def sync_to_database():
                 st.session_state.transaction_history.remove(transaction)
         
         # 标记旧的草稿为inactive，只保留最新的5个草稿
+        sync_placeholder.info("DEBUG: Cleaning up old drafts...")
         try:
             all_drafts = [a for a in st.session_state.player_assets if a.asset_type == 'story_draft']
             # 按创建时间排序
@@ -640,6 +661,7 @@ def sync_to_database():
             print(f"Error marking old drafts as inactive: {str(e)}")
         
         # 直接获取最新的数据，不使用缓存
+        sync_placeholder.info("DEBUG: Refreshing assets...")
         st.session_state.player_assets = get_player_assets(st.session_state.player_id)
         st.session_state.owned_vocabs = get_player_vocabularies(st.session_state.player_id)
         
@@ -653,8 +675,12 @@ def sync_to_database():
         # DEBUG PRINT
         print(f"Sync completed at {st.session_state.last_sync_time}")
         
+        # 清除同步提示
+        sync_placeholder.empty()
+        
         return True, "Successfully synced to database!"
     except Exception as e:
+        sync_placeholder.error(f"DEBUG: Sync error - {str(e)}")
         return False, f"Sync to database failed: {str(e)}"
     finally:
         db.close()

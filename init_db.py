@@ -42,7 +42,7 @@ def init_database():
 
     -- Create user assets table
     CREATE TABLE user_assets (
-        asset_id VARCHAR(30) PRIMARY KEY,  -- Format: v1_a1_timestamp (v=vocabulary, s=story, u=user creation)
+        asset_id VARCHAR(100) PRIMARY KEY,  -- Format: v1_a1_timestamp (v=vocabulary, s=story, u=user creation)
         player_id VARCHAR(30) NOT NULL,
         round_id INT UNSIGNED NOT NULL,  -- Round the asset belongs to
         asset_type VARCHAR(30) NOT NULL,
@@ -61,7 +61,7 @@ def init_database():
     CREATE TABLE story_ratings (
         rating_id VARCHAR(30) PRIMARY KEY,  -- Format: r_timestamp_player_id_random
         player_id VARCHAR(30) NOT NULL,
-        asset_id VARCHAR(30) NOT NULL,
+        asset_id VARCHAR(100) NOT NULL,
         creativity_score INT NOT NULL,  -- 创造性评分 (1-7)
         coherence_score INT NOT NULL,   -- 连贯性评分 (1-7)
         overall_score INT NOT NULL,     -- 整体评分 (1-7)
