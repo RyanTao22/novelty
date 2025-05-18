@@ -62,7 +62,7 @@ def init_session_state():
         for story in stories:
             # If the user hasn't rated this story yet
             if story.asset_id not in rated_story_ids:
-                # Record the original IP rate
+                # 直接使用数据库中的content_ip_rate，不应用默认值
                 story.original_ip_rate = story.content_ip_rate
                 st.session_state.stories_for_rating.append(story)
                 
@@ -74,6 +74,7 @@ def init_session_state():
                     rating_type: config['default_value'] 
                     for rating_type, config in RATING_CONFIGS.items()
                 }
+                # 直接存储原始的IP费率，不做任何转换或设置默认值
                 st.session_state.rating_data[story.asset_id]['original_ip_rate'] = story.original_ip_rate
     finally:
         db.close()
@@ -112,6 +113,15 @@ def submit_all_ratings():
                         if key in st.session_state:
                             st.session_state.rating_data[asset_id][rating_type] = st.session_state[key]
             
+            # 不对original_ip_rate应用任何默认值，直接从数据库获取的值
+            original_ip_rate = None
+            if 'original_ip_rate' in ratings:
+                try:
+                    original_ip_rate = float(ratings['original_ip_rate'])
+                except (ValueError, TypeError):
+                    # 转换失败则保持为None
+                    pass
+            
             # Use fixed IP rate value 2.0 as the rater's IP rate setting
             rating = StoryRatingService.create_rating(
                 db,
@@ -122,7 +132,7 @@ def submit_all_ratings():
                 st.session_state.rating_data[asset_id]['overall'],
                 content_ip_rate=2.0,  # Fixed value, no need for user to set
                 comment="",  # No comments as per requirement
-                original_ip_rate=ratings['original_ip_rate']
+                original_ip_rate=original_ip_rate
             )
             
             if rating:

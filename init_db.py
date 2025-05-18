@@ -59,7 +59,7 @@ def init_database():
     
     -- Create story ratings table
     CREATE TABLE story_ratings (
-        rating_id VARCHAR(30) PRIMARY KEY,  -- Format: r_timestamp_player_id_random
+        rating_id VARCHAR(100) PRIMARY KEY,  -- Format: r_timestamp_player_id_random
         player_id VARCHAR(30) NOT NULL,
         asset_id VARCHAR(100) NOT NULL,
         creativity_score INT NOT NULL,  -- 创造性评分 (1-7)

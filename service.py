@@ -431,13 +431,25 @@ class StoryRatingService:
                      creativity_score: int, coherence_score: int, overall_score: int,
                      content_ip_rate: float, comment: str = None, original_ip_rate: float = None) -> Optional[StoryRating]:
         """Create a new story rating"""
+        # 确保所有数值字段是有效的数据类型
+        try:
+            creativity_score = int(creativity_score)
+            coherence_score = int(coherence_score)
+            overall_score = int(overall_score)
+            content_ip_rate = float(content_ip_rate)
+            if original_ip_rate is not None:
+                original_ip_rate = float(original_ip_rate)
+        except (ValueError, TypeError):
+            # 如果转换失败，使用默认值
+            if not isinstance(creativity_score, int): creativity_score = 4
+            if not isinstance(coherence_score, int): coherence_score = 4
+            if not isinstance(overall_score, int): overall_score = 4
+            if not isinstance(content_ip_rate, float): content_ip_rate = float(2.0)
+            # 对original_ip_rate不设置默认值
+        
         # 检查评分范围
         if not (1 <= creativity_score <= 7 and 1 <= coherence_score <= 7 and 1 <= overall_score <= 7):
             return None
-            
-        # 检查IP费率范围
-        if not (1.0 <= content_ip_rate <= 3.0):
-            content_ip_rate = 1.5  # If out of range, set to default value 1.5
             
         # 检查用户是否已对该故事评分
         existing_rating = db.query(StoryRating).filter(
