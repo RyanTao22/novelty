@@ -1,2 +1,4 @@
 sqlalchemy
 pymysql
+streamlit_autorefresh
+difflib

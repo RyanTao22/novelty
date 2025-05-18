@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, DECIMAL, TIMESTAMP, Boolean, Enum, JSON, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DECIMAL, TIMESTAMP, Boolean, Enum, JSON, Text, Float
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 from config import Base
 
 class Player(Base):
@@ -17,17 +16,13 @@ class Player(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     last_login = Column(TIMESTAMP, nullable=True)
     is_active = Column(Boolean, default=True)
-    
-    # Relationships
-    assets = relationship("UserAsset", back_populates="player", cascade="all, delete-orphan")
-    stories = relationship("UserStory", back_populates="player", cascade="all, delete-orphan")
 
 class Story(Base):
     __tablename__ = 'stories'
     __table_args__ = {'extend_existing': True}
     
     story_id = Column(String(30), primary_key=True)  # Format: a1_s1 (a=round number, 1=participant number, s=story number)
-    player_id = Column(String(30), ForeignKey('players.player_id', ondelete='CASCADE'), nullable=False)
+    player_id = Column(String(30), nullable=False)
     round_id = Column(Integer, nullable=False)  # Round the story belongs to
     content = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -35,8 +30,6 @@ class Story(Base):
     score = Column(Integer)
     feedback = Column(Text)
     used_vocabularies = Column(JSON)  # Store list of used vocabulary IDs
-    
-    # No need to define relationships for views
 
 class GameRound(Base):
     __tablename__ = 'game_rounds'
@@ -49,27 +42,12 @@ class GameRound(Base):
     status = Column(Enum('preparing', 'active', 'finished'), default='preparing')
     parameters = Column(JSON)  # Store vocabulary, combinations and story configurations for this round
 
-class UserStory(Base):
-    __tablename__ = 'user_stories'
-    __table_args__ = {'extend_existing': True}
-    
-    story_id = Column(String(30), primary_key=True)  # Format: s1_a1 (s=story number, 1=round number, a=participant number)
-    player_id = Column(String(30), ForeignKey('players.player_id', ondelete='CASCADE'), nullable=False)
-    round_id = Column(Integer, nullable=False)  # Round the story belongs to
-    content = Column(Text, nullable=False)  # Story content
-    created_at = Column(TIMESTAMP, server_default=func.now())
-    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
-    used_vocabularies = Column(JSON)  # Store list of used vocabulary IDs
-    
-    # Relationships
-    player = relationship("Player", back_populates="stories")
-
 class UserAsset(Base):
     __tablename__ = 'user_assets'
     __table_args__ = {'extend_existing': True}
     
     asset_id = Column(String(30), primary_key=True)  # Format: a1_v1 (a=round number, 1=participant number, v=asset number)
-    player_id = Column(String(30), ForeignKey('players.player_id', ondelete='CASCADE'), nullable=False)
+    player_id = Column(String(30), nullable=False)
     round_id = Column(Integer, nullable=False)  # Round the asset belongs to
     
     # Asset types: vocabulary, story_template, user_creation, story_draft
@@ -79,11 +57,26 @@ class UserAsset(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     status = Column(Enum('active', 'archived', 'submitted', 'approved', 'rejected'), default='active')
     score = Column(Integer)
-    feedback = Column(Text)
+    content_ip_rate = Column(Float)  # 内容IP费率，替换原来的feedback
     used_vocabularies = Column(JSON)  # Store list of used vocabulary IDs
     
     # Metadata - can store price, IP rate, and other additional information
     asset_metadata = Column(JSON)  # Renamed to avoid conflict with SQLAlchemy's internal metadata
+
+class StoryRating(Base):
+    __tablename__ = 'story_ratings'
+    __table_args__ = {'extend_existing': True}
     
-    # Relationships
-    player = relationship("Player", back_populates="assets")
+    rating_id = Column(String(30), primary_key=True)  # Format: r1_p1_s1 (r=rating, p=player id, s=story id)
+    player_id = Column(String(30), nullable=False)
+    asset_id = Column(String(30), nullable=False)
+    
+    # Rating items
+    creativity_score = Column(Integer, nullable=False)  # Creativity rating (1-7)
+    coherence_score = Column(Integer, nullable=False)  # Coherence rating (1-7)
+    overall_score = Column(Integer, nullable=False)   # Overall rating (1-7)
+    content_ip_rate = Column(Float, nullable=False)   # IP rate set by the rater
+    original_ip_rate = Column(Float, nullable=True)   # Original IP rate set by the creator
+    
+    comment = Column(Text)  # Optional comment
+    created_at = Column(TIMESTAMP, server_default=func.now())

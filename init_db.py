@@ -24,6 +24,7 @@ def init_database():
     sql_statements = """
     -- Drop existing tables (if they exist)
     
+    DROP TABLE IF EXISTS story_ratings;
     DROP TABLE IF EXISTS user_assets;
     DROP TABLE IF EXISTS players;
     DROP TABLE IF EXISTS game_rounds;
@@ -49,11 +50,28 @@ def init_database():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status ENUM('active', 'archived', 'submitted', 'approved', 'rejected') DEFAULT 'active',
         score INT,
-        feedback TEXT,
+        content_ip_rate FLOAT,  -- 内容IP费率，替换原来的feedback
         used_vocabularies JSON,  -- Store list of used vocabulary IDs
         asset_metadata JSON,  -- Metadata, can store price, IP rate, etc.
-        FOREIGN KEY (player_id) REFERENCES players(player_id) ON DELETE CASCADE,
+        INDEX idx_asset_player (player_id),
         INDEX idx_asset_type_status (asset_type, status, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    
+    -- Create story ratings table
+    CREATE TABLE story_ratings (
+        rating_id VARCHAR(30) PRIMARY KEY,  -- Format: r_timestamp_player_id_random
+        player_id VARCHAR(30) NOT NULL,
+        asset_id VARCHAR(30) NOT NULL,
+        creativity_score INT NOT NULL,  -- 创造性评分 (1-7)
+        coherence_score INT NOT NULL,   -- 连贯性评分 (1-7)
+        overall_score INT NOT NULL,     -- 整体评分 (1-7)
+        content_ip_rate FLOAT NOT NULL, -- 内容IP费率，与game_rounds结构保持一致
+        original_ip_rate FLOAT,
+        comment TEXT,                   -- 可选评论
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_rating_story (asset_id),
+        INDEX idx_rating_player (player_id),
+        UNIQUE KEY uk_player_story (player_id, asset_id)  -- 每个用户对每个故事只能评分一次
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
     -- Create game rounds table

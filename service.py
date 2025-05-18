@@ -1,13 +1,13 @@
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
-from models import Player, Story, GameRound, UserAsset, UserStory
+from models import Player, Story, GameRound, UserAsset, StoryRating
 from cachetools import cached, TTLCache
 import json
 import logging
 import random
 from decimal import Decimal
 import time
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +56,7 @@ class PlayerService:
 class UserAssetService:
     @staticmethod
     def create_asset(db: Session, player_id: str, round_id: int, asset_type: str, content: str = None, 
-                    vocab_ids: List[str] = None, metadata: Dict = None) -> UserAsset:
+                    vocab_ids: List[str] = None, metadata: Dict = None, content_ip_rate: float = None) -> UserAsset:
         """Create a new asset record"""
         # Generate asset ID: add millisecond timestamp and random number to ensure uniqueness
         timestamp = int(time.time() * 1000)  # Millisecond timestamp
@@ -71,6 +71,7 @@ class UserAssetService:
             asset_type=asset_type,
             content=content,
             status='active',
+            content_ip_rate=content_ip_rate,
             used_vocabularies=json.dumps(vocab_ids) if vocab_ids else None,
             asset_metadata=json.dumps(metadata) if metadata else None
         )
@@ -106,15 +107,15 @@ class UserAssetService:
         return db.query(UserAsset).filter(UserAsset.asset_id == asset_id).first()
 
     @staticmethod
-    def update_asset_status(db: Session, asset_id: str, status: str, score: Optional[int] = None, feedback: Optional[str] = None):
+    def update_asset_status(db: Session, asset_id: str, status: str, score: Optional[int] = None, content_ip_rate: Optional[float] = None):
         """Update asset status"""
         asset = db.query(UserAsset).filter(UserAsset.asset_id == asset_id).first()
         if asset:
             asset.status = status
             if score is not None:
                 asset.score = score
-            if feedback is not None:
-                asset.feedback = feedback
+            if content_ip_rate is not None:
+                asset.content_ip_rate = content_ip_rate
             db.commit()
 
     @staticmethod
@@ -424,57 +425,238 @@ class GameRoundService:
             "price_paid": float(draw_price)
         }
 
-class UserStoryService:
+class StoryRatingService:
     @staticmethod
-    def create_story(db: Session, player_id: str, round_id: int, content: str, vocab_ids: List[str]) -> UserStory:
-        """Create a new user story"""
-        # Generate story ID: format "s{round_id}_{player_id}_{timestamp}"
-        timestamp = int(time.time())
-        story_id = f"s{round_id}_{player_id}_{timestamp}"
+    def create_rating(db: Session, player_id: str, asset_id: str, 
+                     creativity_score: int, coherence_score: int, overall_score: int,
+                     content_ip_rate: float, comment: str = None, original_ip_rate: float = None) -> Optional[StoryRating]:
+        """Create a new story rating"""
+        # 检查评分范围
+        if not (1 <= creativity_score <= 7 and 1 <= coherence_score <= 7 and 1 <= overall_score <= 7):
+            return None
+            
+        # 检查IP费率范围
+        if not (1.0 <= content_ip_rate <= 3.0):
+            content_ip_rate = 1.5  # If out of range, set to default value 1.5
+            
+        # 检查用户是否已对该故事评分
+        existing_rating = db.query(StoryRating).filter(
+            StoryRating.player_id == player_id,
+            StoryRating.asset_id == asset_id
+        ).first()
         
-        story = UserStory(
-            story_id=story_id,
+        if existing_rating:
+            # 如果用户已经评分，返回None而不是更新评分
+            return None
+        
+        # 创建新评分
+        timestamp = int(time.time() * 1000)
+        random_suffix = random.randint(1000, 9999)
+        rating_id = f"r{timestamp}_{player_id}_{random_suffix}"
+        
+        rating = StoryRating(
+            rating_id=rating_id,
             player_id=player_id,
-            round_id=round_id,
-            content=content,
-            used_vocabularies=json.dumps(vocab_ids) if vocab_ids else None
+            asset_id=asset_id,
+            creativity_score=creativity_score,
+            coherence_score=coherence_score,
+            overall_score=overall_score,
+            content_ip_rate=content_ip_rate,
+            original_ip_rate=original_ip_rate,
+            comment=comment
         )
-        db.add(story)
+        
+        db.add(rating)
         db.commit()
-        db.refresh(story)
-        return story
+        return rating
     
     @staticmethod
-    def get_player_stories(db: Session, player_id: str) -> List[UserStory]:
-        """Get all stories of a player"""
-        return db.query(UserStory).filter(UserStory.player_id == player_id).order_by(UserStory.created_at.desc()).all()
+    def get_story_ratings(db: Session, asset_id: str) -> List[StoryRating]:
+        """Get all ratings for a story"""
+        return db.query(StoryRating).filter(StoryRating.asset_id == asset_id).all()
     
     @staticmethod
-    def get_latest_story(db: Session, player_id: str) -> Optional[UserStory]:
-        """Get the latest story of a player"""
-        return db.query(UserStory).filter(UserStory.player_id == player_id).order_by(UserStory.created_at.desc()).first()
+    def get_player_ratings(db: Session, player_id: str) -> List[StoryRating]:
+        """Get all ratings by a player"""
+        return db.query(StoryRating).filter(StoryRating.player_id == player_id).all()
     
     @staticmethod
-    def get_story_by_id(db: Session, story_id: str) -> Optional[UserStory]:
-        """Get story by ID"""
-        return db.query(UserStory).filter(UserStory.story_id == story_id).first()
+    def get_rating(db: Session, player_id: str, asset_id: str) -> Optional[StoryRating]:
+        """Get a specific player's rating for a specific story"""
+        return db.query(StoryRating).filter(
+            StoryRating.player_id == player_id,
+            StoryRating.asset_id == asset_id
+        ).first()
     
     @staticmethod
-    def update_story(db: Session, story_id: str, content: str) -> bool:
-        """Update story content"""
-        story = db.query(UserStory).filter(UserStory.story_id == story_id).first()
-        if story:
-            story.content = content
-            db.commit()
-            return True
-        return False
-    
+    def calculate_story_average_ratings(db: Session, asset_id: str) -> Dict:
+        """Calculate average ratings for a story"""
+        ratings = StoryRatingService.get_story_ratings(db, asset_id)
+        
+        if not ratings:
+            return {
+                "creativity_avg": 0,
+                "coherence_avg": 0,
+                "overall_avg": 0,
+                "content_ip_rate_avg": 1.5,
+                "rating_count": 0
+            }
+        
+        creativity_sum = sum(rating.creativity_score for rating in ratings)
+        coherence_sum = sum(rating.coherence_score for rating in ratings)
+        overall_sum = sum(rating.overall_score for rating in ratings)
+        ip_rate_sum = sum(rating.content_ip_rate for rating in ratings)
+        count = len(ratings)
+        
+        return {
+            "creativity_avg": round(creativity_sum / count, 2),
+            "coherence_avg": round(coherence_sum / count, 2),
+            "overall_avg": round(overall_sum / count, 2),
+            "content_ip_rate_avg": round(ip_rate_sum / count, 2),
+            "rating_count": count
+        }
+        
     @staticmethod
-    def delete_story(db: Session, story_id: str) -> bool:
-        """Delete story"""
-        story = db.query(UserStory).filter(UserStory.story_id == story_id).first()
-        if story:
-            db.delete(story)
-            db.commit()
-            return True
-        return False
+    def get_submitted_stories_for_rating(db: Session, round_id: int) -> List[UserAsset]:
+        """Get submitted stories from the previous round for rating"""
+        # 获取上一轮的故事
+        previous_round = round_id
+        if previous_round < 1:
+            previous_round = 1  # Default to at least round 1
+            
+        # 查询上一轮的所有已提交故事
+        stories = db.query(UserAsset).filter(
+            UserAsset.round_id == previous_round,
+            UserAsset.asset_type == 'user_creation',
+            UserAsset.status == 'submitted'
+        ).order_by(UserAsset.created_at.desc()).all()
+        
+        return stories
+        
+    @staticmethod
+    def generate_next_round_story_data(db: Session, round_id: int) -> List[Dict]:
+        """Generate story data for the next round based on ratings, keeping format consistent with game_rounds"""
+        # 获取当前轮次的所有已提交故事
+        stories = db.query(UserAsset).filter(
+            UserAsset.round_id == round_id,
+            UserAsset.asset_type == 'user_creation',
+            UserAsset.status == 'submitted'
+        ).all()
+        
+        next_round_stories = []
+        
+        # 为每个故事生成下一轮游戏所需的结构
+        for story in stories:
+            # 获取故事的平均评分
+            avg_ratings = StoryRatingService.calculate_story_average_ratings(db, story.asset_id)
+            
+            # 获取故事使用的词汇
+            vocab_ids = []
+            if story.used_vocabularies:
+                try:
+                    vocab_ids = json.loads(story.used_vocabularies)
+                except:
+                    pass
+            
+            # 构建与game_rounds中兼容的故事数据
+            story_data = {
+                "id": story.asset_id,
+                "content": story.content,
+                "rating": avg_ratings["overall_avg"] or 4.0,  # Use overall rating as the rating
+                "content_ip_rate": avg_ratings["content_ip_rate_avg"] or 1.5,  # Use average IP rate
+                "vocab_ids": vocab_ids,
+                "creator": story.player_id
+            }
+            
+            next_round_stories.append(story_data)
+        
+        return next_round_stories
+
+class StoryValidationService:
+    @staticmethod
+    def validate_story(story_content: str, owned_vocab_words: List[str]) -> Dict:
+        """
+        Validate if a story meets the specified rules:
+        1. Each sentence must contain exactly one word or phrase
+        2. Each word or phrase can only be used in one sentence
+        3. All words or phrases must be used, and the number of sentences = number of words/phrases
+        
+        Args:
+            story_content: Story content
+            owned_vocab_words: List of owned words or phrases
+            
+        Returns:
+            Dict containing validation result and message
+            {
+                "valid": True/False,
+                "message": "Success/Error message",
+                "matches": {} # Mapping of sentence indices to matched words (only when valid=True)
+            }
+        """
+        import re
+        
+        # 1. Split into sentences
+        sentences = [s.strip() for s in re.split(r'[.!?]+', story_content) if s.strip()]
+        
+        # 2. Check if each sentence contains exactly one word or phrase
+        sentence_word_matches = {}
+        used_words = set()
+        
+        for i, sentence in enumerate(sentences):
+            sentence_matches = []
+            
+            for word in owned_vocab_words:
+                if word.lower() in sentence.lower():
+                    sentence_matches.append(word)
+                    
+            # Check number of vocabulary matches in the current sentence
+            if len(sentence_matches) == 0:
+                return {
+                    "valid": False,
+                    "message": f"Sentence {i+1} does not contain any purchased words or phrases."
+                }
+            elif len(sentence_matches) > 1:
+                return {
+                    "valid": False,
+                    "message": f"Sentence {i+1} contains multiple words or phrases: {', '.join(sentence_matches)}. Each sentence should contain only one word or phrase."
+                }
+            
+            # Check if the word has already been used in other sentences
+            word = sentence_matches[0]
+            if word in used_words:
+                return {
+                    "valid": False,
+                    "message": f"Word or phrase '{word}' is used in multiple sentences. Each word or phrase should be used in only one sentence."
+                }
+            
+            # Add to used words and sentence matches dictionary
+            used_words.add(word)
+            sentence_word_matches[i] = word
+        
+        # 3. Check if all vocabulary is used (number of sentences = number of vocabulary)
+        if len(sentences) != len(owned_vocab_words):
+            if len(sentences) < len(owned_vocab_words):
+                return {
+                    "valid": False,
+                    "message": f"You own {len(owned_vocab_words)} words or phrases, but there are only {len(sentences)} sentences. Each word or phrase must be used in a sentence."
+                }
+            else:
+                return {
+                    "valid": False,
+                    "message": f"You own {len(owned_vocab_words)} words or phrases, but there are {len(sentences)} sentences. Each sentence must use exactly one word or phrase."
+                }
+        
+        # 4. Check if all vocabulary is used
+        unused_words = set(owned_vocab_words) - used_words
+        if unused_words:
+            return {
+                "valid": False,
+                "message": f"The following words or phrases are not used: {', '.join(unused_words)}. All words or phrases must be used."
+            }
+            
+        # All checks passed
+        return {
+            "valid": True,
+            "message": "Story check passed! Each sentence uses one word or phrase, and all words or phrases are used.",
+            "matches": sentence_word_matches
+        }
