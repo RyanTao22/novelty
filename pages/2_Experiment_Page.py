@@ -823,6 +823,13 @@ def render_left_sidebar():
     with submit_story:
         submit_button = st.button("Submit Story", type="primary", use_container_width=True)
 
+    # 添加导航按钮，仅在用户已提交故事后显示
+    existing_creations = [asset for asset in st.session_state.player_assets 
+                          if asset.asset_type == 'user_creation']
+    if existing_creations:
+        if st.button("⭐ Go Rate Other Stories", type="primary" , use_container_width=True):
+            st.switch_page("pages/3_Score_Story_Page.py")
+
     if save_button:
         # Handle saving draft
         with st.spinner('Saving draft...'):

@@ -9,6 +9,31 @@ import time
 # Set page configuration
 st.set_page_config(layout="wide", page_title="Story Rating Page", page_icon="⭐")
 
+# 定义评分项配置
+RATING_CONFIGS = {
+    'creativity': {
+        'label': "Creativity",
+        'help': "New ideas, original concepts, and innovative elements in the story",
+        'min_value': 1,
+        'max_value': 7,
+        'default_value': 1
+    },
+    'coherence': {
+        'label': "Coherence",
+        'help': "Structure, logic, and coherence of the story",
+        'min_value': 1,
+        'max_value': 7,
+        'default_value': 1
+    },
+    'overall': {
+        'label': "Overall",
+        'help': "Overall quality of the story considering all aspects",
+        'min_value': 1,
+        'max_value': 7,
+        'default_value': 1
+    }
+}
+
 # Initialize session state
 def init_session_state():
     # Check if logged in
@@ -46,13 +71,29 @@ def init_session_state():
             st.session_state.rating_data = {}
             for i, story in enumerate(st.session_state.stories_for_rating):
                 st.session_state.rating_data[story.asset_id] = {
-                    'creativity': 4,
-                    'coherence': 4,
-                    'overall': 4,
-                    'original_ip_rate': story.original_ip_rate
+                    rating_type: config['default_value'] 
+                    for rating_type, config in RATING_CONFIGS.items()
                 }
+                st.session_state.rating_data[story.asset_id]['original_ip_rate'] = story.original_ip_rate
     finally:
         db.close()
+
+# 生成评分滑块的函数
+def create_rating_sliders(story, index):
+    
+    ratings = {}
+    
+    for rating_type, config in RATING_CONFIGS.items():
+        ratings[rating_type] = st.slider(
+            config['label'],
+            min_value=config['min_value'],
+            max_value=config['max_value'],
+            value=st.session_state.rating_data[story.asset_id][rating_type],
+            help=config['help'],
+            key=f"{rating_type}_{index}"
+        )
+    
+    return ratings
 
 # Submit all ratings function
 def submit_all_ratings():
@@ -66,12 +107,10 @@ def submit_all_ratings():
             for i, story in enumerate(st.session_state.stories_for_rating):
                 if story.asset_id == asset_id:
                     # Check if the keys exist in session state and update
-                    if f"creativity_{i}" in st.session_state:
-                        st.session_state.rating_data[asset_id]['creativity'] = st.session_state[f"creativity_{i}"]
-                    if f"coherence_{i}" in st.session_state:
-                        st.session_state.rating_data[asset_id]['coherence'] = st.session_state[f"coherence_{i}"]
-                    if f"overall_{i}" in st.session_state:
-                        st.session_state.rating_data[asset_id]['overall'] = st.session_state[f"overall_{i}"]
+                    for rating_type in RATING_CONFIGS.keys():
+                        key = f"{rating_type}_{i}"
+                        if key in st.session_state:
+                            st.session_state.rating_data[asset_id][rating_type] = st.session_state[key]
             
             # Use fixed IP rate value 2.0 as the rater's IP rate setting
             rating = StoryRatingService.create_rating(
@@ -103,11 +142,26 @@ def main():
     # Page title
     st.title("Story Rating System")
     
+    # 添加一个状态标记，判断是否已完成评分
+    if 'rating_completed' not in st.session_state:
+        st.session_state.rating_completed = False
+    
+    # 如果已完成评分，只显示完成信息
+    if st.session_state.rating_completed:
+        st.success('Study completed successfully! Please click the link below to return to Prolific and finalize your submission, then close this browser.')
+        st.success(f"Completion URL: {st.secrets['completion_url']}")
+        st.balloons()
+        return
+    
     # Display stories for rating
     if 'stories_for_rating' not in st.session_state or not st.session_state.stories_for_rating:
         st.success("You have rated all available stories. Thank you!")
+        # 标记评分已完成
+        st.session_state.rating_completed = True
+        st.rerun()
         return
     
+    # 以下是评分表单部分
     # Grid layout for stories (2 stories per row)
     stories = st.session_state.stories_for_rating
     num_stories = len(stories)
@@ -129,35 +183,8 @@ def main():
                 # Lower half: Rating controls
                 st.markdown("**Rating (1-7)**")
                 
-                # Creativity rating
-                creativity = st.slider(
-                    "Creativity", 
-                    min_value=1, 
-                    max_value=7, 
-                    value=st.session_state.rating_data[story.asset_id]['creativity'],
-                    help="New ideas, original concepts, and innovative elements in the story",
-                    key=f"creativity_{i}"
-                )
-                
-                # Coherence rating
-                coherence = st.slider(
-                    "Coherence", 
-                    min_value=1, 
-                    max_value=7, 
-                    value=st.session_state.rating_data[story.asset_id]['coherence'],
-                    help="Structure, logic, and coherence of the story",
-                    key=f"coherence_{i}"
-                )
-                
-                # Overall rating
-                overall = st.slider(
-                    "Overall", 
-                    min_value=1, 
-                    max_value=7, 
-                    value=st.session_state.rating_data[story.asset_id]['overall'],
-                    help="Overall quality of the story considering all aspects",
-                    key=f"overall_{i}"
-                )
+                # 使用函数生成评分滑块
+                create_rating_sliders(story, i)
                 st.divider()
             
             # Right column: second story in the pair (if available)
@@ -173,35 +200,8 @@ def main():
                     # Lower half: Rating controls
                     st.markdown("**Rating (1-7)**")
                     
-                    # Creativity rating
-                    creativity = st.slider(
-                        "Creativity", 
-                        min_value=1, 
-                        max_value=7, 
-                        value=st.session_state.rating_data[story.asset_id]['creativity'],
-                        help="New ideas, original concepts, and innovative elements in the story",
-                        key=f"creativity_{i+1}"
-                    )
-                    
-                    # Coherence rating
-                    coherence = st.slider(
-                        "Coherence", 
-                        min_value=1, 
-                        max_value=7, 
-                        value=st.session_state.rating_data[story.asset_id]['coherence'],
-                        help="Structure, logic, and coherence of the story",
-                        key=f"coherence_{i+1}"
-                    )
-                    
-                    # Overall rating
-                    overall = st.slider(
-                        "Overall", 
-                        min_value=1, 
-                        max_value=7, 
-                        value=st.session_state.rating_data[story.asset_id]['overall'],
-                        help="Overall quality of the story considering all aspects",
-                        key=f"overall_{i+1}"
-                    )
+                    # 使用函数生成评分滑块
+                    create_rating_sliders(story, i+1)
                     st.divider()
         
         # Single submit button at the bottom for all ratings
@@ -212,11 +212,9 @@ def main():
             success, message = submit_all_ratings()
             
             if success:
-                st.success(message)
-                # Refresh page, remove rated stories
-                st.session_state.stories_for_rating = None
-                st.session_state.rating_data = None
-                st.experimental_rerun()
+                # 标记评分已完成
+                st.session_state.rating_completed = True
+                st.rerun()
             else:
                 st.error(message)
 
