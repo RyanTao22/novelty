@@ -57,7 +57,8 @@ def main():
                 "Must contain one of your chosen words",
                 "Must contain all of your chosen words"
             ],
-            index=None
+            
+            index=1,
         )
 
         if st.button("Submit Answer"):
